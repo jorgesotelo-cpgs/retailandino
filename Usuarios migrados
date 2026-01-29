@@ -1,0 +1,73 @@
+"WITH superpet_users AS (
+    -- Cohorte: usuarios que compraron en Superpet (brand_id = 28609) en PETS
+    SELECT DISTINCT
+        user_key
+    FROM rp_silver_db_prod.des_prod.order_dimensions
+    WHERE country = 'PE'
+      AND closed_at::date >= '2025-01-01'
+      AND vertical_sub_group = 'PETS'
+      AND brand_group_id = 1190
+),
+
+other_pets AS (
+    -- Compras en otras brands PETS hechas por el cohorte Superpet
+    SELECT
+        DATE_TRUNC('MONTH', od.closed_at)::date AS year_month,
+        od.brand_id,
+        od.brand_name,
+        od.user_key
+    FROM rp_silver_db_prod.des_prod.order_dimensions od
+    JOIN superpet_users su
+      ON su.user_key = od.user_key
+    WHERE od.country = 'PE'
+      AND od.closed_at::date >= '2025-01-01'
+      AND od.vertical_sub_group = 'PETS'
+      AND brand_group_id <> 1190
+),
+
+top5_brands AS (
+    -- Top 5 brands (por usuarios únicos del cohorte) en TODO el periodo
+    SELECT
+        brand_id,
+        brand_name,
+        COUNT(DISTINCT user_key) AS users_in_period
+    FROM other_pets
+    GROUP BY 1,2
+    QUALIFY ROW_NUMBER() OVER (ORDER BY users_in_period DESC) <= 5
+),
+
+monthly_top5 AS (
+    -- Usuarios del cohorte por mes en esas Top 5 brands
+    SELECT
+        o.year_month,
+        o.brand_id,
+        o.brand_name,
+        COUNT(DISTINCT o.user_key) AS users_in_month
+    FROM other_pets o
+    JOIN top5_brands t
+      ON t.brand_id = o.brand_id
+    GROUP BY 1,2,3
+),
+
+cohort_size AS (
+    -- Tamaño del cohorte Superpet (para % si lo quieres)
+    SELECT COUNT(DISTINCT user_key) AS superpet_users_total
+    FROM superpet_users
+)
+
+SELECT
+    m.year_month,
+    m.brand_id,
+    m.brand_name,
+    m.users_in_month,
+    t.users_in_period,
+    c.superpet_users_total,
+    ROUND(100 * m.users_in_month / NULLIF(c.superpet_users_total, 0), 2) AS pct_of_superpet_cohort_in_month
+FROM monthly_top5 m
+JOIN top5_brands t
+  ON t.brand_id = m.brand_id
+CROSS JOIN cohort_size c
+ORDER BY m.year_month, m.users_in_month DESC;
+
+
+"
