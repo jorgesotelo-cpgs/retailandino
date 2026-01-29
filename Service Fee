@@ -1,0 +1,12 @@
+SELECT
+    brand_group_id,
+    brand_group_name,
+    count (distinct order_id) as total_orders,
+    sum(service_fee_usd) as service_fee_usd
+FROM rp_silver_db_prod.des_prod.order_dimensions
+WHERE country = 'PE'
+  AND closed_at::date >= '2025-10-01'
+  AND closed_at::date <= '2025-12-31'
+  AND vertical_sub_group = 'PETS'
+  AND brand_group_id = 1569
+GROUP BY all
