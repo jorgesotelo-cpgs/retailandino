@@ -1,0 +1,17 @@
+SELECT
+    city_name,
+    brand_id,
+    brand_name,
+    COUNT(DISTINCT user_key) AS total_users,
+    DATE_TRUNC('MONTH', closed_at)::date AS year_month
+FROM rp_silver_db_prod.des_prod.order_dimensions
+WHERE country = 'PE'
+  AND brand_group_id = 1190
+  AND closed_at::date >= '2025-01-01'
+  and vertical_sub_group = 'PETS'
+GROUP BY
+    city_name,
+    brand_id,
+    brand_name,
+    DATE_TRUNC('MONTH', closed_at)::date
+ORDER BY year_month
