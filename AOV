@@ -1,0 +1,16 @@
+SELECT
+    city_name,
+    DATE_TRUNC('MONTH', closed_at)::date AS year_month,
+    COUNT(DISTINCT order_id) AS total_orders,
+    SUM(price) AS total_value,
+    DIV0(SUM(gmv), COUNT(DISTINCT order_id)) AS aov
+FROM rp_silver_db_prod.des_prod.order_dimensions
+WHERE country = 'PE'
+  AND closed_at::date >= '2025-01-01'
+  AND vertical_sub_group = 'PETS'
+  AND brand_group_id = 1190
+GROUP BY
+    city_name,
+    DATE_TRUNC('MONTH', closed_at)::date
+ORDER BY
+    year_month, city_name;
