@@ -1,0 +1,114 @@
+"""    WITH pets_orders AS (
+    SELECT
+        user_key,
+        order_id,
+        closed_at,
+        brand_group_id,
+        brand_id,
+        brand_name,
+        city_name,
+        ROW_NUMBER() OVER (
+            PARTITION BY user_key
+            ORDER BY closed_at, order_id
+        ) AS rn
+    FROM rp_silver_db_prod.des_prod.order_dimensions
+    WHERE country = 'PE'
+      AND closed_at::date >= '2025-01-01'
+      AND vertical_sub_group = 'PETS'
+),
+
+first5 AS (
+    SELECT *
+    FROM pets_orders
+    QUALIFY rn <= 5
+),
+
+pivoted AS (
+    SELECT
+        user_key,
+        MAX(IFF(rn = 1, city_name, NULL))       AS city_name_1st,
+
+        MAX(IFF(rn = 1, brand_group_id, NULL))  AS bg1,
+        MAX(IFF(rn = 2, brand_group_id, NULL))  AS bg2,
+        MAX(IFF(rn = 3, brand_group_id, NULL))  AS bg3,
+        MAX(IFF(rn = 4, brand_group_id, NULL))  AS bg4,
+        MAX(IFF(rn = 5, brand_group_id, NULL))  AS bg5
+    FROM first5
+    GROUP BY 1
+),
+
+flags AS (
+    SELECT
+        user_key,
+        city_name_1st AS city_name,
+
+        /* 1ra compra = Superpet */
+        IFF(bg1 = 1190, 1, 0) AS step1_superpet,
+
+        /* 2da compra:
+           - Lima => Lumpet (1569)
+           - Otras ciudades => cualquier brand excepto Superpet
+        */
+        IFF(
+            bg1 = 1190
+            AND bg2 IS NOT NULL
+            AND (
+                (city_name_1st = 'Lima' AND bg2 = 1569)
+                OR
+                (city_name_1st <> 'Lima' AND bg2 <> 1190)
+            ),
+            1, 0
+        ) AS step2_rule,
+
+        /* 3ra, 4ta, 5ta = existe y NO es Superpet */
+        IFF(
+            bg1 = 1190
+            AND bg2 IS NOT NULL
+            AND (
+                (city_name_1st = 'Lima' AND bg2 = 1569)
+                OR
+                (city_name_1st <> 'Lima' AND bg2 <> 1190)
+            )
+            AND bg3 IS NOT NULL AND bg3 <> 1190,
+            1, 0
+        ) AS step3_not_superpet,
+
+        IFF(
+            bg1 = 1190
+            AND bg2 IS NOT NULL
+            AND (
+                (city_name_1st = 'Lima' AND bg2 = 1569)
+                OR
+                (city_name_1st <> 'Lima' AND bg2 <> 1190)
+            )
+            AND bg3 IS NOT NULL AND bg3 <> 1190
+            AND bg4 IS NOT NULL AND bg4 <> 1190,
+            1, 0
+        ) AS step4_not_superpet,
+
+        IFF(
+            bg1 = 1190
+            AND bg2 IS NOT NULL
+            AND (
+                (city_name_1st = 'Lima' AND bg2 = 1569)
+                OR
+                (city_name_1st <> 'Lima' AND bg2 <> 1190)
+            )
+            AND bg3 IS NOT NULL AND bg3 <> 1190
+            AND bg4 IS NOT NULL AND bg4 <> 1190
+            AND bg5 IS NOT NULL AND bg5 <> 1190,
+            1, 0
+        ) AS step5_not_superpet
+    FROM pivoted
+)
+
+SELECT
+    city_name,
+    COUNT(DISTINCT IFF(step1_superpet = 1, user_key, NULL)) AS users_step1_superpet,
+    COUNT(DISTINCT IFF(step2_rule     = 1, user_key, NULL)) AS users_step2,
+    COUNT(DISTINCT IFF(step3_not_superpet = 1, user_key, NULL)) AS users_step3,
+    COUNT(DISTINCT IFF(step4_not_superpet = 1, user_key, NULL)) AS users_step4,
+    COUNT(DISTINCT IFF(step5_not_superpet = 1, user_key, NULL)) AS users_step5
+FROM flags
+GROUP BY 1
+ORDER BY users_step1_superpet DESC, city_name;"""
