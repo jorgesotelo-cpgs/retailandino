@@ -1,0 +1,25 @@
+select distinct date(created_at) as fecha, 
+vertical_group,
+vertical_sub_group, 
+brand_group_id, 
+brand_group_name, 
+brand_id, 
+brand_name,
+store_id,
+store_name,
+--count_to_gmv,PAYMENT_METHOD,state, IS_CANCELLED,
+count(distinct(order_id)) as TOTAL_ORDERS,
+sum (TOTAL_VALUE) as TOTAL_VALUE_ML,
+sum (gmv) as TOTAL_GMV,
+sum (gmv_usd) as TOTAL_GMV_USD,
+sum (gmv_usd_fixed) as TOTAL_GMV_USD_FIXED,
+sum (gmv_usd_current) as TOTAL_GMV_USD_CURRENT,
+from rp_silver_db_prod.des_prod.order_dimensions 
+where country = 'PE'
+and vertical_group in ('CPGS','ECOMMERCE')
+and created_at::date >= '2024-01-01'
+and created_at::date < '2026-07-21'
+and count_to_gmv = true
+and brand_group_id in (1581,182)
+group by all
+order by 1
